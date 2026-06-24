@@ -7,7 +7,6 @@ import time
 import datetime
 import torch
 from torch.autograd import Variable
-from torch.cuda.amp import autocast, GradScaler
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -43,7 +42,7 @@ def get_lr(optimizer):
         return param_group['lr']
 
 
-def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genval, Epoch, cuda, scaler):
+def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genval, Epoch, cuda):
     total_loss = 0
     val_loss = 0
     _epoch_start = time.time()
@@ -61,16 +60,14 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
                     images = Variable(torch.from_numpy(images).type(torch.FloatTensor))
                     targets = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)) for ann in targets]
             optimizer.zero_grad()
-            with autocast():
-                outputs = net(images)
-                losses = []
-                for i in range(len(outputs)):
-                    loss_item = yolo_losses[i](outputs[i], targets)
-                    losses.append(loss_item[0])
-                loss = sum(losses)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            outputs = net(images)
+            losses = []
+            for i in range(len(outputs)):
+                loss_item = yolo_losses[i](outputs[i], targets)
+                losses.append(loss_item[0])
+            loss = sum(losses)
+            loss.backward()
+            optimizer.step()
 
             total_loss += loss
             waste_time = time.time() - start_time
@@ -97,14 +94,13 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
                     images_val = Variable(torch.from_numpy(images_val).type(torch.FloatTensor))
                     targets_val = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)) for ann in targets_val]
                 optimizer.zero_grad()
-                with autocast():
-                    outputs = net(images_val)
-                    losses = []
-                    for i in range(len(outputs)):
-                        loss_item = yolo_losses[i](outputs[i], targets_val)
-                        losses.append(loss_item[0])
-                    loss = sum(losses)
-                    val_loss += loss
+                outputs = net(images_val)
+                losses = []
+                for i in range(len(outputs)):
+                    loss_item = yolo_losses[i](outputs[i], targets_val)
+                    losses.append(loss_item[0])
+                loss = sum(losses)
+                val_loss += loss
             pbar.set_postfix(**{'total_loss': val_loss.item() / (iteration + 1)})
             pbar.update(1)
 
@@ -248,8 +244,6 @@ if __name__ == "__main__":
         cudnn.benchmark = True
         net = net.cuda()
 
-    scaler = GradScaler()
-
     yolo_losses = []
     num_heads = 4 if custom else 3
     all_anchors = np.reshape(anchors, [-1, 2])
@@ -311,7 +305,7 @@ if __name__ == "__main__":
             param.requires_grad = False
 
         for epoch in range(Init_Epoch, Freeze_Epoch):
-            fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, gen_val, Freeze_Epoch, Cuda, scaler)
+            fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, gen_val, Freeze_Epoch, Cuda)
             lr_scheduler.step()
 
     if True:
@@ -348,5 +342,5 @@ if __name__ == "__main__":
             param.requires_grad = True
 
         for epoch in range(Freeze_Epoch, Unfreeze_Epoch):
-            fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, gen_val, Unfreeze_Epoch, Cuda, scaler)
+            fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, gen_val, Unfreeze_Epoch, Cuda)
             lr_scheduler.step()
