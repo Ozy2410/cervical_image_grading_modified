@@ -30,3 +30,6 @@ Code/version4_lstmfcn_final/
 !requirements.txt
 !*.pdf
 !*.md
+
+# Security
+kaggle.json
