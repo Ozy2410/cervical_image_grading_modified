@@ -273,7 +273,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     if True:
         lr = 1e-3
-        Batch_size = 8  # Optimized for Colab T4 16GB VRAM
+        Batch_size = 4
         Init_Epoch = 0
         Freeze_Epoch = 50
 
@@ -286,9 +286,9 @@ if __name__ == "__main__":
         if Use_Data_Loader:
             train_dataset = YoloDataset(lines[:num_train], (input_shape[0], input_shape[1]), mosaic=mosaic)
             val_dataset = YoloDataset(lines[num_train:], (input_shape[0], input_shape[1]), mosaic=False)
-            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
+            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
                              drop_last=True, collate_fn=yolo_dataset_collate)
-            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
+            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
                                  drop_last=True, collate_fn=yolo_dataset_collate)
         else:
             gen = Generator(Batch_size, lines[:num_train],
@@ -310,7 +310,7 @@ if __name__ == "__main__":
 
     if True:
         lr = 1e-4
-        Batch_size = 8  # Optimized for Colab T4 16GB VRAM
+        Batch_size = 4
         Freeze_Epoch = 50
         Unfreeze_Epoch = 200
 
@@ -323,9 +323,9 @@ if __name__ == "__main__":
         if Use_Data_Loader:
             train_dataset = YoloDataset(lines[:num_train], (input_shape[0], input_shape[1]), mosaic=mosaic)
             val_dataset = YoloDataset(lines[num_train:], (input_shape[0], input_shape[1]), mosaic=False)
-            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
+            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
                              drop_last=True, collate_fn=yolo_dataset_collate)
-            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
+            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
                                  drop_last=True, collate_fn=yolo_dataset_collate)
         else:
             gen = Generator(Batch_size, lines[:num_train],
