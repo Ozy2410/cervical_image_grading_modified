@@ -25,7 +25,7 @@ for cls in CLASSES:
         for bmp in sorted(glob.glob(os.path.join(class_dir, '*.bmp'))):
             txt = os.path.splitext(bmp)[0] + '.txt'
             if os.path.exists(txt):
-                lines.append(os.path.relpath(bmp, '.') + '\n')
+                lines.append(os.path.relpath(bmp, '.').replace('\\', '/') + '\n')
             else:
                 missing_labels += 1
 
@@ -35,7 +35,7 @@ for cls in CLASSES:
         for bmp in sorted(glob.glob(os.path.join(cropped_dir, '*.bmp'))):
             txt = os.path.splitext(bmp)[0] + '.txt'
             if os.path.exists(txt):
-                lines.append(os.path.relpath(bmp, '.') + '\n')
+                lines.append(os.path.relpath(bmp, '.').replace('\\', '/') + '\n')
             else:
                 missing_labels += 1
 
@@ -46,7 +46,7 @@ if os.path.exists(AUG_ROOT):
         basename = os.path.basename(bmp)
         txt = os.path.join(SIPAKMED_ROOT, 'aug_labels', os.path.splitext(basename)[0] + '.txt')
         if os.path.exists(txt):
-            lines.append(os.path.relpath(bmp, '.') + '\n')
+            lines.append(os.path.relpath(bmp, '.').replace('\\', '/') + '\n')
         else:
             missing_labels += 1
 
