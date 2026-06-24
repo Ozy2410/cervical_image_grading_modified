@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from utils.dataloader import yolo_dataset_collate, YoloDataset
 from nets.yolo_training import YOLOLoss, Generator
 from nets.yolo4 import YoloBody
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 # ---------------------------------------------------#
@@ -45,8 +45,9 @@ def get_lr(optimizer):
 def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genval, Epoch, cuda):
     total_loss = 0
     val_loss = 0
+    _epoch_start = time.time()
     start_time = time.time()
-    with tqdm(total=epoch_size, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3) as pbar:
+    with tqdm(total=epoch_size, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3, ascii=True) as pbar:
         for iteration, batch in enumerate(gen):
             if iteration >= epoch_size:
                 break
@@ -61,7 +62,7 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
             optimizer.zero_grad()
             outputs = net(images)
             losses = []
-            for i in range(3):
+            for i in range(len(outputs)):
                 loss_item = yolo_losses[i](outputs[i], targets)
                 losses.append(loss_item[0])
             loss = sum(losses)
@@ -79,7 +80,7 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
             start_time = time.time()
 
     print('Start Validation')
-    with tqdm(total=epoch_size_val, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3) as pbar:
+    with tqdm(total=epoch_size_val, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3, ascii=True) as pbar:
         for iteration, batch in enumerate(genval):
             if iteration >= epoch_size_val:
                 break
@@ -95,7 +96,7 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
                 optimizer.zero_grad()
                 outputs = net(images_val)
                 losses = []
-                for i in range(3):
+                for i in range(len(outputs)):
                     loss_item = yolo_losses[i](outputs[i], targets_val)
                     losses.append(loss_item[0])
                 loss = sum(losses)
@@ -103,16 +104,25 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
             pbar.set_postfix(**{'total_loss': val_loss.item() / (iteration + 1)})
             pbar.update(1)
 
-    print('Finish Validation')
-    print('Epoch:' + str(epoch + 1) + '/' + str(Epoch))
-    print('Total Loss: %.4f || Val Loss: %.4f ' % (total_loss / (epoch_size + 1), val_loss / (epoch_size_val + 1)))
-    print('Saving state, iter:', str(epoch + 1))
-    # weightsdir = "trained_weights/logs20201030"
+    train_loss  = total_loss / (epoch_size + 1)
+    v_loss      = val_loss   / (epoch_size_val + 1)
+    elapsed     = time.time() - _epoch_start
+    remaining   = elapsed * (Epoch - epoch - 1)
+    eta_str     = str(datetime.timedelta(seconds=int(remaining)))
+
+    print('\n' + '='*60)
+    print(f'  Epoch      : {epoch+1:>4d} / {Epoch}')
+    print(f'  Train Loss : {train_loss:.6f}')
+    print(f'  Val   Loss : {v_loss:.6f}')
+    print(f'  LR         : {get_lr(optimizer):.2e}')
+    print(f'  Epoch Time : {elapsed:.1f}s   |   ETA: {eta_str}')
+    print('='*60 + '\n')
+
     if not os.path.exists(weights_save_dir):
         os.makedirs(weights_save_dir)
     if (epoch + 1) % 5 == 0:
         torch.save(model.state_dict(), f'{weights_save_dir}/Epoch%d-Total_Loss%.4f-Val_Loss%.4f.pth' % (
-            (epoch + 1), total_loss / (epoch_size + 1), val_loss / (epoch_size_val + 1)))
+            (epoch + 1), train_loss, v_loss))
 
 
 # ----------------------------------------------------#
@@ -120,6 +130,60 @@ def fit_one_epoch(net, yolo_losses, epoch, epoch_size, epoch_size_val, gen, genv
 #   https://www.bilibili.com/video/BV1zE411u7Vw
 # ----------------------------------------------------#
 if __name__ == "__main__":
+    # ----------------------------------------------------#
+    #   Auto-setup model_data and lzsp_train20201202.txt
+    # ----------------------------------------------------#
+    import os
+    from PIL import Image
+
+    model_data_dir = 'model_data'
+    os.makedirs(model_data_dir, exist_ok=True)
+    
+    classes = ["Dyskeratotic", "Koilocytotic", "Metaplastic", "Parabasal", "Superficial-Intermediate"]
+    with open(os.path.join(model_data_dir, 'single_cell.txt'), 'w') as f:
+        f.write('\n'.join(classes) + '\n')
+    with open(os.path.join(model_data_dir, 'lzsp_classes.txt'), 'w') as f:
+        f.write('\n'.join(classes) + '\n')
+        
+    custom = True # Set to True for MSA-YOLO
+    
+    if custom:
+        anchors_list = "5,6, 8,11, 10,14, 12,16, 19,36, 40,28, 36,75, 76,55, 72,146, 142,110, 192,243, 459,401"
+    else:
+        anchors_list = "12,16, 19,36, 40,28, 36,75, 76,55, 72,146, 142,110, 192,243, 459,401"
+        
+    with open(os.path.join(model_data_dir, '608_anchors.txt'), 'w') as f:
+        f.write(anchors_list)
+    with open(os.path.join(model_data_dir, 'yolo_anchors.txt'), 'w') as f:
+        f.write(anchors_list)
+        
+    annotation_path = 'lzsp_train20201202.txt'
+    if not os.path.exists(annotation_path):
+        print("Dataset annotations not found. Auto-generating lzsp_train20201202.txt...")
+        if os.path.exists('sipakmed_data'):
+            lines = []
+            categories = ["im_Dyskeratotic", "im_Koilocytotic", "im_Metaplastic", "im_Parabasal", "im_Superficial-Intermediate"]
+            for idx, cat in enumerate(categories):
+                cat_path = os.path.join('sipakmed_data', cat, "CROPPED")
+                if not os.path.exists(cat_path):
+                    cat_path = os.path.join('sipakmed_data', cat)
+                if os.path.exists(cat_path):
+                    files = [f for f in os.listdir(cat_path) if f.lower().endswith(('.jpg', '.png', '.bmp'))]
+                    print(f"Adding category: {cat} ({len(files)} files)")
+                    for file in files:
+                        img_path = os.path.join(cat_path, file)
+                        try:
+                            with Image.open(img_path) as im:
+                                w, h = im.size
+                            lines.append(f"{img_path} 0,0,{w},{h},{idx}\n")
+                        except:
+                            pass
+            with open(annotation_path, 'w') as f:
+                f.writelines(lines)
+            print(f"Generated lzsp_train20201202.txt with {len(lines)} annotations!")
+        else:
+            print("Error: sipakmed_data folder not found! Please check dataset path.")
+
     # -------------------------------#
     #   输入的shape大小
     #   显存比较小可以使用416x416
@@ -134,6 +198,7 @@ if __name__ == "__main__":
     # 用于设定是否使用cuda
     Cuda = True
     smoooth_label = 0
+    # custom variable moved up
     # -------------------------------#
     #   Dataloder的使用
     # -------------------------------#
@@ -145,25 +210,31 @@ if __name__ == "__main__":
     # -------------------------------#
     anchors_path = 'model_data/608_anchors.txt'
     classes_path = 'model_data/single_cell.txt'
-    weights_save_dir = "trained_weights/logs20201202"
+    weights_save_dir = "trained_weights/msa_yolo" if custom else "trained_weights/baseline_yolov4"
     class_names = get_classes(classes_path)
     anchors = get_anchors(anchors_path)
     num_classes = len(class_names)
 
     # 创建模型
-    model = YoloBody(len(anchors[0]), num_classes)
+    model = YoloBody(len(anchors[0]), num_classes, custom=custom)
     # -------------------------------------------#
     #   权值文件的下载请看README
     # -------------------------------------------#
-    model_path = "model_data/yolo4_weights.pth"
+    model_path = ""
     # 加快模型训练的效率
     print('Loading weights into state dict...')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_dict = model.state_dict()
-    pretrained_dict = torch.load(model_path, map_location=device)
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) == np.shape(v)}
-    model_dict.update(pretrained_dict)
-    model.load_state_dict(model_dict)
+    
+    # Load state dict (check shapes dynamically to handle custom/baseline differences)
+    try:
+        pretrained_dict = torch.load(model_path, map_location=device)
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and np.shape(model_dict[k]) == np.shape(v)}
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
+    except Exception as e:
+        print(f"Skipping loading weights: {e}")
+        
     print('Finished!')
 
     net = model.train()
@@ -173,11 +244,14 @@ if __name__ == "__main__":
         cudnn.benchmark = True
         net = net.cuda()
 
-    # 建立loss函数
     yolo_losses = []
-    for i in range(3):
-        yolo_losses.append(YOLOLoss(np.reshape(anchors, [-1, 2]), num_classes, \
-                                    (input_shape[1], input_shape[0]), smoooth_label, Cuda))
+    num_heads = 4 if custom else 3
+    all_anchors = np.reshape(anchors, [-1, 2])
+    anchors_per_head = len(all_anchors) // num_heads
+    for i in range(num_heads):
+        head_anchors = all_anchors[i * anchors_per_head:(i + 1) * anchors_per_head]
+        yolo_losses.append(YOLOLoss(head_anchors, num_classes, \
+                                    (input_shape[1], input_shape[0]), Cuda))
 
     # 0.1用于验证，0.9用于训练
     val_split = 0.3
@@ -199,7 +273,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     if True:
         lr = 1e-3
-        Batch_size = 4
+        Batch_size = 8  # Optimized for Colab T4 16GB VRAM
         Init_Epoch = 0
         Freeze_Epoch = 50
 
@@ -212,9 +286,9 @@ if __name__ == "__main__":
         if Use_Data_Loader:
             train_dataset = YoloDataset(lines[:num_train], (input_shape[0], input_shape[1]), mosaic=mosaic)
             val_dataset = YoloDataset(lines[num_train:], (input_shape[0], input_shape[1]), mosaic=False)
-            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
+            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
                              drop_last=True, collate_fn=yolo_dataset_collate)
-            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
+            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
                                  drop_last=True, collate_fn=yolo_dataset_collate)
         else:
             gen = Generator(Batch_size, lines[:num_train],
@@ -236,7 +310,7 @@ if __name__ == "__main__":
 
     if True:
         lr = 1e-4
-        Batch_size = 4
+        Batch_size = 8  # Optimized for Colab T4 16GB VRAM
         Freeze_Epoch = 50
         Unfreeze_Epoch = 200
 
@@ -249,9 +323,9 @@ if __name__ == "__main__":
         if Use_Data_Loader:
             train_dataset = YoloDataset(lines[:num_train], (input_shape[0], input_shape[1]), mosaic=mosaic)
             val_dataset = YoloDataset(lines[num_train:], (input_shape[0], input_shape[1]), mosaic=False)
-            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
+            gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
                              drop_last=True, collate_fn=yolo_dataset_collate)
-            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
+            gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=2, pin_memory=True,
                                  drop_last=True, collate_fn=yolo_dataset_collate)
         else:
             gen = Generator(Batch_size, lines[:num_train],

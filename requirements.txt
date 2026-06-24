@@ -1,0 +1,14 @@
+numpy<2.0.0
+opencv-python
+albumentations
+tqdm
+progressbar2
+scikit-learn
+tslearn
+pandas
+matplotlib
+plotly
+kaleido
+kagglehub
+Pillow
+tensorboard

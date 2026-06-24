@@ -1,0 +1,32 @@
+# Environments
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Data and Weights
+*sipakmed_data*/
+*trained_weights*/
+*model_data*/
+*.pth
+*.pt
+*.h5
+
+# Temp and Output Files
+.vscode/
+temp_repo/
+Code/.temp_files/
+Code/input/
+Code/results/
+Code/version3_ml/
+Code/version4_lstmfcn_final/
+*.zip
+*.log
+
+# Keep only notebooks, Python files, requirements, and PDFs
+!*.py
+!*.ipynb
+!requirements.txt
+!*.pdf
+!*.md

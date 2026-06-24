@@ -26,7 +26,8 @@ class YOLO(object):
         "model_image_size": (608, 608, 3),
         "confidence": 0.3,
         "iou": 0.4,
-        "cuda": True
+        "cuda": True,
+        "custom": False
     }
 
     @classmethod
@@ -70,7 +71,7 @@ class YOLO(object):
     # ---------------------------------------------------#
     def generate(self):
 
-        self.net = YoloBody(len(self.anchors[0]), len(self.class_names)).eval()
+        self.net = YoloBody(len(self.anchors[0]), len(self.class_names), custom=self.custom).eval()
 
         # 加快模型训练的效率
         print('Loading weights into state dict...')
@@ -86,7 +87,7 @@ class YOLO(object):
         print('Finished!')
 
         self.yolo_decodes = []
-        for i in range(3):
+        for i in range(len(self.anchors)):
             self.yolo_decodes.append(
                 DecodeBox(self.anchors[i], len(self.class_names), (self.model_image_size[1], self.model_image_size[0])))
 
@@ -122,7 +123,7 @@ class YOLO(object):
             outputs = self.net(images)
 
         output_list = []
-        for i in range(3):
+        for i in range(len(self.anchors)):
             output_list.append(self.yolo_decodes[i](outputs[i]))
         output = torch.cat(output_list, 1)
         batch_detections = non_max_suppression(output, len(self.class_names),
@@ -213,7 +214,7 @@ class YOLO(object):
             outputs = self.net(images)
 
         output_list = []
-        for i in range(3):
+        for i in range(len(self.anchors)):
             output_list.append(self.yolo_decodes[i](outputs[i]))
         output = torch.cat(output_list, 1)
         batch_detections = non_max_suppression(output, len(self.class_names),
